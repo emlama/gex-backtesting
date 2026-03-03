@@ -1,10 +1,29 @@
 """Visualization functions for GCI meta-analysis results.
 
-Creates publication-quality charts for:
-- Correlation heatmaps
-- PUT return distributions
-- Signal comparison charts
-- Time series of metrics
+Creates publication-quality charts using matplotlib/seaborn with a dark
+background theme.  All figures are saved to the ``results/`` directory as
+PNG files at 150 DPI.
+
+Chart types and their purpose:
+
+- **Correlation heatmap** (``plot_correlation_heatmap``): 2-panel grid showing
+  Spearman correlation and lift ratio for each metric x time-window combination.
+  One row per PUT selection method. Answers: "Which metrics predict PUT gains?"
+- **PUT return distribution** (``plot_put_return_distribution``): 2-panel figure
+  showing overall return distribution and conditional distribution (spike vs
+  no-spike).  Answers: "Do returns shift when a metric spikes?"
+- **Permutation null** (``plot_permutation_null``): Histogram of null
+  distribution from permutation test with observed value marked.  Answers:
+  "Is the observed lift statistically significant?"
+- **Composite comparison** (``plot_composite_comparison``): Horizontal bar
+  chart comparing lift ratios across composite signals with confidence
+  intervals.  Answers: "Which signal combination has the best edge?"
+- **Metric timeseries** (``plot_metric_timeseries``): Multi-panel line chart
+  of metric values over a single trading day with threshold lines.
+  Answers: "What did the metrics look like on this specific day?"
+
+The ``Visualizer`` class is instantiated by ``processor.BacktestRunner``
+and uses ``Config.results_dir`` for file output.
 """
 
 from pathlib import Path
@@ -19,13 +38,18 @@ from .config import Config
 
 
 class Visualizer:
-    """Create visualizations for analysis results."""
+    """Create and save publication-quality matplotlib charts for analysis results.
+
+    Uses dark background theme (``plt.style.use("dark_background")``) and the
+    ``husl`` seaborn palette.  All methods return the ``Path`` to the saved PNG.
+    """
 
     def __init__(self, config: Config):
-        """Initialize with configuration.
+        """Initialize visualizer and create the results output directory.
 
         Args:
-            config: Analysis configuration
+            config: Master ``Config`` -- uses ``results_dir`` for file output
+                and ``thresholds`` for threshold reference lines.
         """
         self.config = config
         self.results_dir = config.ensure_results_dir()
@@ -39,14 +63,22 @@ class Visualizer:
         df_results: pd.DataFrame,
         filename: str = "correlation_heatmap.png",
     ) -> Path:
-        """Create correlation heatmap comparing metrics and time windows.
+        """Create a 2-column heatmap grid: Spearman correlation and lift ratio.
+
+        Layout: One row per PUT selection method (n_strikes_otm, max_vomma).
+        Left column = Spearman r (metric vs PUT % gain), right column = lift
+        ratio (P(gain>100% | spike) / P(gain>100% | no spike)).
+
+        Green cells indicate predictive metrics; red indicates inverse or
+        no relationship.  Infinite lift values are capped at 10.0 for display.
 
         Args:
-            df_results: DataFrame with 'metric', 'window', 'spearman_r', 'lift' columns
-            filename: Output filename
+            df_results: Output from ``BacktestRunner.run_univariate_analysis()``
+                with columns: metric, window, spearman_r, lift, put_method.
+            filename: Output filename (saved in ``results_dir``).
 
         Returns:
-            Path to saved figure
+            Path to saved figure.
         """
         # Handle multiple PUT selection methods - create separate heatmaps
         put_methods = df_results["put_method"].unique() if "put_method" in df_results.columns else ["default"]
@@ -124,17 +156,25 @@ class Visualizer:
         gain_col: str = "pct_gain_30m",
         filename: str = "put_return_distribution.png",
     ) -> Path:
-        """Plot PUT return distributions conditional on signal.
+        """Plot PUT return distributions: overall and conditional on signal spike.
+
+        Layout: 2 panels side by side.
+        - Left panel: Histogram of all PUT % gains with breakeven (0%) and
+          100% gain reference lines.
+        - Right panel: Overlaid histograms comparing gains when the signal
+          metric exceeds the threshold ("spike") vs when it does not.
+
+        Returns are clipped to [-100%, +500%] for visualization only.
 
         Args:
-            df: DataFrame with gain and signal columns
-            signal_col: Name of signal column
-            threshold: Threshold for spike definition
-            gain_col: Name of gain column
-            filename: Output filename
+            df: Interval-level DataFrame with metric and gain columns.
+            signal_col: Column name of the metric to split on (e.g. "gci").
+            threshold: Value above which the metric counts as a "spike".
+            gain_col: Column name of the PUT % gain to plot.
+            filename: Output filename.
 
         Returns:
-            Path to saved figure
+            Path to saved figure.
         """
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -204,17 +244,22 @@ class Visualizer:
         metric_name: str = "GCI",
         filename: str = "permutation_null.png",
     ) -> Path:
-        """Plot permutation test null distribution.
+        """Plot the permutation test null distribution with observed lift marked.
+
+        Shows a histogram of lift values obtained by randomly shuffling the
+        signal labels (null hypothesis: signal has no predictive power).
+        The observed lift is drawn as a red dashed line.  If the observed
+        value falls far into the right tail, the signal is significant.
 
         Args:
-            observed_lift: Observed lift value
-            null_distribution: Array of null lift values
-            p_value: Permutation p-value
-            metric_name: Name of metric being tested
-            filename: Output filename
+            observed_lift: The actual lift from the un-shuffled data.
+            null_distribution: Array of lift values from permutation shuffles.
+            p_value: Fraction of null lifts >= observed lift.
+            metric_name: Label for the metric (used in title).
+            filename: Output filename.
 
         Returns:
-            Path to saved figure
+            Path to saved figure.
         """
         fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -255,14 +300,21 @@ class Visualizer:
         df_composite: pd.DataFrame,
         filename: str = "composite_comparison.png",
     ) -> Path:
-        """Plot comparison of composite signals.
+        """Plot horizontal bar chart comparing lift ratios of composite signals.
+
+        Bars are color-coded: green (lift > 1.5, strong edge), orange
+        (1.0 < lift <= 1.5, marginal), red (lift <= 1.0, no edge).
+        Confidence interval error bars are drawn if ``ci_low``/``ci_high``
+        columns are present.  Reference lines at lift=1.0 (no edge) and
+        lift=1.5 (target edge) are included.
 
         Args:
-            df_composite: DataFrame with signal comparison results
-            filename: Output filename
+            df_composite: Output from ``BacktestRunner.run_composite_analysis()``
+                with columns: signal, lift, and optionally ci_low, ci_high.
+            filename: Output filename.
 
         Returns:
-            Path to saved figure
+            Path to saved figure.
         """
         fig, ax = plt.subplots(figsize=(12, 6))
 
@@ -310,16 +362,25 @@ class Visualizer:
         metrics: Optional[list[str]] = None,
         filename: Optional[str] = None,
     ) -> Path:
-        """Plot metric values over time for a single day.
+        """Plot metric values over time for a single trading day.
+
+        Layout: Vertically stacked subplots, one per metric, sharing the
+        x-axis (time in ET).  Each subplot shows the metric line with markers
+        and a horizontal red dashed threshold reference line (from
+        ``Config.thresholds``).
+
+        Useful for inspecting what happened on a specific day -- e.g. to see
+        whether a GCI spike coincided with a PUT price explosion.
 
         Args:
-            df: DataFrame with interval and metric columns
-            date: Date string for title
-            metrics: List of metrics to plot (default: gci, pgr, car_net)
-            filename: Output filename
+            df: Single-day interval DataFrame with ``interval`` column and
+                one column per metric (output of ``DayProcessor.process()``).
+            date: Date string for the figure title (e.g. "2024-06-21").
+            metrics: Which metrics to plot (default: ["gci", "pgr", "car_net"]).
+            filename: Output filename (default: ``metrics_timeseries_{date}.png``).
 
         Returns:
-            Path to saved figure
+            Path to saved figure.
         """
         if metrics is None:
             metrics = ["gci", "pgr", "car_net"]

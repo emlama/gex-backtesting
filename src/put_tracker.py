@@ -1,12 +1,26 @@
-"""PUT option price tracking for measuring actual returns.
+"""PUT option price tracking for measuring actual returns after signals.
 
-V2: Two selection methods:
-1. N-strikes-OTM: Select the Nth strike below ATM
-2. Max-vomma: Select the strike with highest vomma exposure
+This module answers the core research question: "When a gamma metric spikes,
+how much do OTM puts actually gain?"  It tracks PUT prices from signal entry
+to multiple exit horizons, providing the outcome variable (% gain) that
+``metrics.py`` signals are tested against in ``processor.py``.
 
-Key principle: Measure PUT % gains, NOT SPX point moves.
-The Greek effects (vomma/zomma) cause option prices to explode
-far beyond what delta alone would predict.
+Two strike selection methods are supported:
+1. **N-strikes-OTM**: Select the Nth put strike below ATM (simple, robust).
+2. **Max-vomma**: Select the strike with highest vomma exposure, weighted
+   by volume.  Vomma-rich strikes see the largest price explosions when
+   volatility spikes (calculated via ``greeks.BlackScholesGreeks``).
+
+Pricing conventions:
+- **Entry**: Use bid price (conservative -- assumes you'd have to sell
+  to enter, or that you'd pay the bid to buy in a fast market).
+- **Exit**: Use mid price (fair value estimate at exit time).
+- **Time window**: Trades within +/- ``window_seconds`` of the target
+  time are aggregated to estimate prices.
+
+The ``PutTracker`` is instantiated by ``processor.DayProcessor`` and called
+once per interval to produce return columns that feed into statistical
+analysis (``statistics.py``) and visualization (``visualization.py``).
 """
 
 from dataclasses import dataclass
@@ -21,7 +35,20 @@ from .greeks import BlackScholesGreeks
 
 @dataclass
 class PutPrices:
-    """PUT prices at a specific time."""
+    """Snapshot of PUT prices at a specific time, derived from trade-level data.
+
+    Bid and ask are estimated from trade side classification (at_bid, at_ask, etc.)
+    rather than from a direct quote feed.  When no bid-side or ask-side trades exist
+    in the window, the min/max of all prices is used as a fallback.
+
+    Attributes:
+        strike: The option strike price.
+        bid_price: Estimated bid (median of bid-side trades, or price min).
+        mid_price: Median of all trade prices in the window.
+        ask_price: Estimated ask (median of ask-side trades, or price max).
+        n_trades: Number of trades in the time window.
+        volume: Total contracts traded (sum of ``size`` column).
+    """
 
     strike: float
     bid_price: float
@@ -33,25 +60,47 @@ class PutPrices:
 
 @dataclass
 class PutReturns:
-    """PUT returns at multiple time horizons."""
+    """PUT return profile from entry (signal time) to multiple exit horizons.
+
+    Each time horizon (15m, 30m, 45m, 60m) has an exit price, percentage gain,
+    and corresponding spot price change for reference.  Horizons that extend
+    past 4:00 PM ET expiry are excluded (see ``TimeWindow.get_valid_time_horizons``).
+
+    Attributes:
+        entry_price: Bid price at signal time (conservative entry).
+        strike: The selected put strike.
+        entry_volume: Total volume at the strike around signal time.
+        exit_prices: Map of minutes-after-signal -> mid exit price (None if unavailable).
+        pct_gains: Map of minutes-after-signal -> percentage gain vs entry price.
+        spot_changes: Map of minutes-after-signal -> SPX point change from signal.
+        selection_method: Which method chose this strike ("n_strikes_otm" or "max_vomma").
+    """
 
     entry_price: float
     strike: float
     entry_volume: int
-    exit_prices: dict[int, Optional[float]]  # minutes -> price
-    pct_gains: dict[int, Optional[float]]    # minutes -> % gain
-    spot_changes: dict[int, Optional[float]]  # minutes -> spot change
-    selection_method: str  # "n_strikes_otm" or "max_vomma"
+    exit_prices: dict[int, Optional[float]]
+    pct_gains: dict[int, Optional[float]]
+    spot_changes: dict[int, Optional[float]]
+    selection_method: str
 
 
 class PutTracker:
-    """Track PUT option prices and returns after signals."""
+    """Track PUT option prices and calculate returns after gamma-metric signals.
+
+    Orchestrates strike selection, price lookup, and return calculation for
+    each signal interval.  Used by ``processor.DayProcessor.process()`` to
+    attach PUT return columns alongside the gamma metrics computed by
+    ``metrics.MetricCalculator``.
+    """
 
     def __init__(self, config: Config):
         """Initialize with configuration.
 
         Args:
-            config: Analysis configuration
+            config: Master ``Config`` object; uses ``put_selection`` for strike
+                selection parameters and ``time_window`` for expiry-aware horizon
+                capping.
         """
         self.config = config
         self.put_selection = config.put_selection
@@ -59,11 +108,11 @@ class PutTracker:
         self.greeks_calc = BlackScholesGreeks(config.risk_free_rate)
 
     def _get_opt_type_col(self, df: pd.DataFrame) -> str:
-        """Get the option type column name (handles both formats)."""
+        """Get the option type column name (handles both ``opt_type`` and ``option_type``)."""
         return "opt_type" if "opt_type" in df.columns else "option_type"
 
     def _is_put(self, df: pd.DataFrame) -> pd.Series:
-        """Check if option is a PUT."""
+        """Return boolean mask identifying PUT options (handles 'P' and 'PUT' values)."""
         opt_type_col = self._get_opt_type_col(df)
         opt_type_vals = df[opt_type_col].str.upper()
         return opt_type_vals.isin(["P", "PUT"])

@@ -1,7 +1,20 @@
-"""Vectorized Black-Scholes Greeks Calculation.
+"""Vectorized Black-Scholes pricing and implied volatility estimation.
 
-Numpy-vectorized implementations for fast Greeks computation.
-Performance: ~100x faster than row-by-row pandas apply().
+This module provides numpy-vectorized implementations of core Black-Scholes
+functions used by the backtesting pipeline. All functions operate on numpy
+arrays rather than scalar values, enabling ~100x speedup vs row-by-row
+pandas apply() when processing thousands of option trades per interval.
+
+The primary consumers are:
+- ``gex_calculator.py``: Uses ``calculate_greeks()`` to compute IV, delta,
+  and gamma for GEX aggregation.
+- ``metrics.py``: Uses ``calculate_gamma()`` indirectly via ``greeks.py``
+  for higher-order Greek calculations.
+
+Functions here compute first-order Greeks (delta, gamma) and implied
+volatility. For higher-order Greeks (vomma, zomma, charm), see
+``greeks.py`` which provides a class-based ``BlackScholesGreeks``
+calculator.
 """
 
 import numpy as np
@@ -15,7 +28,23 @@ def calculate_d1(
     rate: float,
     sigma: np.ndarray,
 ) -> np.ndarray:
-    """Calculate d1 term in Black-Scholes formula."""
+    """Calculate the d1 term of the Black-Scholes formula.
+
+    d1 = [ln(S/K) + (r + sigma^2/2) * T] / (sigma * sqrt(T))
+
+    Both ``tte`` and ``sigma`` are clamped to a minimum of 1e-10 to avoid
+    division-by-zero when options are at or very near expiration.
+
+    Args:
+        spot: Underlying (SPX) price array.
+        strike: Option strike price array.
+        tte: Time to expiration in years (fractional).
+        rate: Risk-free interest rate (annualized, e.g. 0.05 for 5%).
+        sigma: Implied volatility array.
+
+    Returns:
+        Array of d1 values, same shape as inputs.
+    """
     sqrt_tte = np.sqrt(np.maximum(tte, 1e-10))
     sigma_safe = np.maximum(sigma, 1e-10)
     return (np.log(spot / strike) + (rate + 0.5 * sigma_safe**2) * tte) / (sigma_safe * sqrt_tte)
@@ -28,7 +57,24 @@ def calculate_gamma(
     rate: float,
     sigma: np.ndarray,
 ) -> np.ndarray:
-    """Calculate option gamma (vectorized). Same for calls and puts."""
+    """Calculate option gamma (second derivative of price w.r.t. spot).
+
+    Gamma = phi(d1) / (S * sigma * sqrt(T))
+
+    Gamma is identical for calls and puts (put-call parity).  The result
+    is clipped to [0, 1] to suppress numerical noise from near-zero
+    denominators when TTE or sigma are extremely small.
+
+    Args:
+        spot: Underlying price array.
+        strike: Strike price array.
+        tte: Time to expiration in years.
+        rate: Risk-free interest rate.
+        sigma: Implied volatility array.
+
+    Returns:
+        Gamma values clipped to [0, 1].
+    """
     sqrt_tte = np.sqrt(np.maximum(tte, 1e-10))
     sigma_safe = np.maximum(sigma, 1e-10)
     d1 = calculate_d1(spot, strike, tte, rate, sigma_safe)
@@ -44,7 +90,22 @@ def calculate_delta(
     sigma: np.ndarray,
     is_call: np.ndarray,
 ) -> np.ndarray:
-    """Calculate option delta (vectorized)."""
+    """Calculate option delta (first derivative of price w.r.t. spot).
+
+    For calls: delta = N(d1)        (range [0, 1])
+    For puts:  delta = N(d1) - 1    (range [-1, 0])
+
+    Args:
+        spot: Underlying price array.
+        strike: Strike price array.
+        tte: Time to expiration in years.
+        rate: Risk-free interest rate.
+        sigma: Implied volatility array.
+        is_call: Boolean array -- True for calls, False for puts.
+
+    Returns:
+        Delta values for each option.
+    """
     d1 = calculate_d1(spot, strike, tte, rate, sigma)
     call_delta = norm.cdf(d1)
     put_delta = call_delta - 1
@@ -60,7 +121,36 @@ def estimate_iv_from_price(
     is_call: np.ndarray,
     iterations: int = 5,
 ) -> np.ndarray:
-    """Estimate implied volatility from option price (vectorized Newton-Raphson)."""
+    """Estimate implied volatility from observed option prices using Newton-Raphson.
+
+    Uses a vectorized Newton-Raphson iteration to invert the Black-Scholes
+    formula for IV.  The algorithm:
+
+    1. **Initial guess**: sigma_0 = price / (0.4 * S * sqrt(T)), clamped
+       to [0.05, 2.0].  This Brenner-Subrahmanyam approximation provides
+       a reasonable starting point for ATM options.
+    2. **Iteration**: sigma_{n+1} = sigma_n - (BS(sigma_n) - price) / vega
+       where vega = S * phi(d1) * sqrt(T).  Vega is floored at 1e-10 to
+       prevent division by zero when options are deep OTM or near expiry.
+    3. **Clamping**: After each iteration, sigma is clamped to [0.05, 3.0]
+       to prevent divergence.
+
+    Five iterations is typically sufficient for convergence to within ~0.01
+    of true IV for liquid strikes.  Deep OTM options with very small prices
+    may not converge precisely, but the clamp bounds keep results reasonable.
+
+    Args:
+        spot: Underlying price array.
+        strike: Strike price array.
+        tte: Time to expiration in years.
+        rate: Risk-free interest rate.
+        price: Observed option mid-price array.
+        is_call: Boolean array -- True for calls, False for puts.
+        iterations: Number of Newton-Raphson steps (default 5).
+
+    Returns:
+        Estimated implied volatility array, clamped to [0.05, 3.0].
+    """
     sqrt_tte = np.sqrt(np.maximum(tte, 1e-10))
     sigma = np.clip(price / (0.4 * spot * sqrt_tte), 0.05, 2.0)
 
@@ -88,9 +178,23 @@ def calculate_greeks(
     price: np.ndarray,
     is_call: np.ndarray,
 ) -> dict[str, np.ndarray]:
-    """Calculate all Greeks from option prices (vectorized).
+    """Calculate first-order Greeks from observed option prices.
 
-    Returns dict with 'iv', 'delta', 'gamma' arrays.
+    Convenience function that chains IV estimation -> gamma -> delta in a
+    single call.  This is the main entry point used by ``gex_calculator.py``
+    when processing raw trade data that has prices but no pre-computed Greeks.
+
+    Args:
+        spot: Underlying price array.
+        strike: Strike price array.
+        tte: Time to expiration in years.
+        rate: Risk-free interest rate.
+        price: Observed option price array.
+        is_call: Boolean array -- True for calls, False for puts.
+
+    Returns:
+        Dictionary with keys ``'iv'``, ``'delta'``, ``'gamma'``, each
+        containing a numpy array of the same shape as the inputs.
     """
     iv = estimate_iv_from_price(spot, strike, tte, rate, price, is_call)
     gamma = calculate_gamma(spot, strike, tte, rate, iv)

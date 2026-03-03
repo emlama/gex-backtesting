@@ -1,7 +1,23 @@
-"""Black-Scholes Greeks calculations.
+"""Black-Scholes higher-order Greeks calculations.
 
-Provides analytical formulas for gamma, vomma, zomma, and charm.
-These higher-order Greeks are critical for understanding PUT price explosions.
+Provides analytical closed-form formulas for gamma, vomma, zomma, and charm
+-- the higher-order Greeks most relevant to understanding late-day 0DTE PUT
+price explosions.  These Greeks capture the nonlinear feedback loops where
+a move in spot or volatility amplifies itself:
+
+- **Gamma**: d(delta)/d(S) -- delta acceleration, highest ATM near expiry.
+- **Vomma** (volga): d(vega)/d(sigma) -- how vega itself changes with vol.
+  High vomma means option prices explode during vol spikes.
+- **Zomma**: d(gamma)/d(sigma) -- how gamma changes with vol.  Creates a
+  feedback loop: vol spike -> gamma increase -> bigger hedging demand.
+- **Charm**: d(delta)/d(t) -- delta decay, extreme for 0DTE near expiry.
+
+The ``BlackScholesGreeks`` class is used by ``metrics.MetricCalculator``
+for per-interval metric computation and by ``put_tracker.PutTracker``
+for vomma-based strike selection.
+
+For first-order Greeks (delta, gamma) and IV estimation from prices,
+see ``black_scholes.py`` which provides standalone vectorized functions.
 """
 
 import numpy as np
@@ -183,17 +199,22 @@ class BlackScholesGreeks:
         sigma: float | np.ndarray,
         is_call: bool | np.ndarray = True,
     ) -> dict[str, np.ndarray]:
-        """Calculate all Greeks at once.
+        """Calculate all four higher-order Greeks in a single call.
+
+        Returns gamma, vomma, zomma, and charm.  This is the primary entry
+        point used by ``MetricCalculator.calculate()`` for per-interval
+        Greek computation.
 
         Args:
-            S: Spot price
-            K: Strike price
-            T: Time to expiration (years)
-            sigma: Implied volatility
-            is_call: Whether option is a call
+            S: Spot price (scalar or array).
+            K: Strike price (scalar or array).
+            T: Time to expiration in years.
+            sigma: Implied volatility.
+            is_call: Whether option is a call (affects charm sign only).
 
         Returns:
-            Dictionary with all Greeks
+            Dictionary with keys ``'gamma'``, ``'vomma'``, ``'zomma'``,
+            ``'charm'``, each containing numpy arrays.
         """
         return {
             "gamma": self.gamma(S, K, T, sigma),

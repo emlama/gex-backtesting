@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(uv *)",
+      "Bash(jupyter *)",
+      "Bash(git *)",
+      "Bash(pytest *)",
+      "Bash(cd *)",
+      "Bash(ls *)",
+      "Bash(cat *)"
+    ]
+  }
+}
