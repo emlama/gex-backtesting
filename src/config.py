@@ -125,7 +125,7 @@ class Config:
 
     # Study period
     study_start: str = "2024-01-02"
-    study_end: str = "2025-03-20"
+    study_end: str = "2026-02-19"
 
     # Interval settings
     interval_minutes: int = 5

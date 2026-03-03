@@ -1,11 +1,11 @@
 # GEX Backtesting Toolkit
 
-SPX 0DTE Gamma Exposure (GEX) analysis toolkit with 305 days of enriched options trade data.
+SPX 0DTE Gamma Exposure (GEX) analysis toolkit with 513 days of enriched options trade data.
 
 ## What's Included
 
-### Dataset (1.3 GB)
-- **305 daily parquet files** of SPX 0DTE option trades (2024-01-02 through 2025-03-20)
+### Dataset (2.3 GB)
+- **513 daily parquet files** of SPX 0DTE option trades (2024-01-02 through 2026-02-19)
 - Source: Polygon.io flat files, enriched with quote-matched trade side classification
 - ~400K-900K trades per day with bid/ask/side labeling
 
@@ -61,19 +61,18 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[jupyter]"
 ```
 
-### 2. Set up data
-
-Copy or symlink the parquet files into `data/`:
+### 2. Download data
 
 ```bash
-# Option A: Symlink (if you have the data locally)
+./download_data.sh
+```
+
+This downloads 513 daily parquet files (2.3 GB) and extracts them into `data/`.
+
+Alternatively, if you have the parquet files locally:
+
+```bash
 ln -s /path/to/trades_parquets/*.parquet data/
-
-# Option B: Copy
-cp /path/to/trades_parquets/*.parquet data/
-
-# Verify
-ls data/trades_*.parquet | wc -l  # Should show 305
 ```
 
 ### 3. Run notebooks
