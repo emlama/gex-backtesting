@@ -1,0 +1,33 @@
+[project]
+name = "gex-backtesting"
+version = "0.1.0"
+description = "SPX 0DTE Gamma Exposure (GEX) backtesting toolkit"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "pyarrow>=14.0.0",
+    "scipy>=1.10.0",
+    "statsmodels>=0.14.0",
+    "tqdm>=4.65.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "pytz>=2023.3",
+]
+
+[project.optional-dependencies]
+jupyter = [
+    "jupyterlab>=4.0.0",
+    "ipywidgets>=8.0.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]

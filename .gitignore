@@ -1,0 +1,20 @@
+# Data (too large for git, use setup_data.sh)
+data/*.parquet
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Results (generated)
+results/*.png
+results/*.csv
+results/*.parquet
+
+# Environment
+.env
