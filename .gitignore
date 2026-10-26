@@ -1,5 +1,7 @@
-# Data (too large for git, use setup_data.sh)
+# Generated market data and local source files
 data/*.parquet
+data/spx_1m_indicators.csv
+data/spxw_settlements_*.csv
 
 # Python
 __pycache__/
@@ -15,6 +17,9 @@ venv/
 results/*.png
 results/*.csv
 results/*.parquet
+results/bulk/
 
 # Environment
 .env
+data/uw/
+.DS_Store
