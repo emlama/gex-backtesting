@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-22",
+  "source": "UW full-tape trade-time NBBO plus official SPXW settlement",
+  "quote_cutoff_et": "2026-10-22T10:30:03-04:00",
+  "max_quote_age_seconds": 3,
+  "valid_option_quotes": 72,
+  "short_put": 7655.0,
+  "short_call": 7705.0,
+  "width": 5,
+  "settlement": 7663.43,
+  "commission_per_contract": 0.65,
+  "trades": 1,
+  "entry_credit_dollars": 255.0,
+  "expiry_debit_dollars": 0,
+  "pnl_dollars": 249.8,
+  "exit_reason": "EXPIRY"
+}

@@ -1,0 +1,14 @@
+{
+  "signals": ["double_breakout", "ema_first_hour"],
+  "ema_pairs": [[30, 50]],
+  "start_date": null,
+  "end_date": null,
+  "dtes": [0, 1],
+  "widths": [5, 10, 20],
+  "put_offsets": [-10, -5, 0],
+  "call_offsets": [0, 5, 10],
+  "quote_delay_seconds": 3,
+  "max_quote_age_seconds": 3,
+  "commission_per_contract_per_side": 0.65,
+  "output_dir": "results/bulk/latest"
+}
