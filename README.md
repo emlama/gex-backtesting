@@ -158,6 +158,42 @@ coverage and quote/fill validation remain necessary.
 
 ## Local bulk backtests and charts
 
+### One-click local UW workbench
+
+To show someone the dashboard interface without sharing UW data, run
+`.venv/bin/python scripts/make_share_demo.py`. This creates a single offline
+HTML file on the Desktop named `SPXW_展示版_全部數據虛構.html`. All option quotes,
+dates, settlements, and backtest results in that file are invented. You can
+send the HTML file directly; recipients can open it in a browser without the
+local workbench server or an API key.
+
+Double-click [`UW 回測工作台.command`](UW%20回測工作台.command) on macOS, or run:
+
+```bash
+.venv/bin/python scripts/uw_workbench.py
+```
+
+The local page opens in your browser. Choose a date range, the currently
+implemented opening-range/EMA signals, 0DTE/1DTE, spread widths, offsets,
+quote freshness and fees. **Preview** shows how many signal dates need a UW
+download. **Download and run** fetches only missing signal dates through the
+saved UW API key, converts each full-tape ZIP into reusable SPXW Parquet, runs
+the local backtester, and links to the generated dashboard and CSV files.
+The key stays in `.env` or `UW_API_KEY` on the local server; it is not sent to
+the browser. The server listens only on `127.0.0.1` and does not call Codex or
+an LLM. Each run is saved separately under `results/bulk/workbench/`.
+
+The workbench currently runs the existing 10:30 ET, hold-to-expiry engine with
+first-hour EMA30/50 and opening-range double-breakout signals. It does not
+execute the additional indicators, arbitrary entry times or logical condition
+builder shown in the newer design mockup. Multiple variants on the same date
+are correlated scenarios, not independent trades. UW full-tape quote snapshots
+are indicative and do not prove an executable multi-leg fill.
+
+Close the Terminal window or press Control-C there to stop the workbench.
+
+### Command-line bulk runner
+
 The batch runner works entirely on local files: no chat or AI tokens are used
 while it runs. The initial UW tape downloads still use your UW API access.
 Edit [`configs/spxw_bulk.json`](configs/spxw_bulk.json) to choose signals,

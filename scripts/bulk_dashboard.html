@@ -245,7 +245,7 @@ function renderHealth() {
   el.innerHTML = `
     <div style="flex: 1 1 280px"><div class="title">${days === 0 ? "沒有任何被接受的交易" : `${days} 個交易日有成交資料`}</div>
       <div class="sub">${small ? "樣本少於 30 個交易日，排名與連續統計不具統計意義。" : "樣本仍是樣本內結果，不代表可交易優勢。"}</div></div>
-    <div><div class="big">${ready} / ${D.coverage.length}</div><div class="sub">訊號 × 到期事件有 UW 報價</div></div>
+    <div><div class="big">${ready} / ${D.coverage.length}</div><div class="sub">訊號 × 到期事件有本機 UW 快取及結算價；仍需通過報價檢查</div></div>
     <div><div class="big">${D.meta.accepted} / ${D.meta.candidate_rows}</div><div class="sub">候選被接受${top ? ` · 主要拒絕原因 <span class="num">${esc(top[0])}</span> (${top[1]})` : ""}</div></div>
     <div><div class="big">${noSettle.length}</div><div class="sub">缺少官方結算價${noSettle.length ? ` (${noSettle.slice(0, 3).map((c) => short(c.expiry || c.date)).join(", ")}${noSettle.length > 3 ? "…" : ""})` : ""}</div></div>`;
 }
@@ -256,7 +256,7 @@ function renderFilters(list) {
     <div class="field"><span class="small muted">訊號 / 結構</span>${seg("sig", [{ v: "all", label: "全部", dot: "var(--soft)" }, ...SIGNALS.map((s) => { const i = sigInfo(s); return { v: s, label: `${i.short} · ${i.struct}`, dot: i.color }; })], state.sig)}</div>
     <div class="field"><span class="small muted">到期</span>${seg("dte", DTES.map((d) => ({ v: d, label: `${d}DTE` })), state.dte)}</div>
     <div class="field"><span class="small muted">價差寬度 (點)</span>${seg("width", [{ v: "all", label: "全部" }, ...WIDTHS.map((w) => ({ v: w, label: String(w) }))], state.width)}</div>
-    <div class="num small muted" style="margin-left: auto">${list.length} 個變體 · ${trades} 筆交易</div>`;
+    <div class="num small muted" style="margin-left: auto">${list.length} 個變體 · ${trades} 個合格候選</div>`;
 }
 
 function renderEmpty() {
@@ -282,8 +282,8 @@ function renderKpis(list) {
   const avg = n ? all.reduce((s, t) => s + t.pnl_dollars, 0) / n : null;
   const days = new Set(all.map((t) => t.date)).size;
   const kpis = [
-    ["平均 P&L / 筆", smoney(avg), `${n} 筆 · 扣手續費`, pnlColor(avg)],
-    ["勝率", pct(n ? wins / n : null), `${wins} / ${n} 筆獲利`, "var(--text)"],
+    ["平均 P&L / 候選", smoney(avg), `${n} 個變體×日期組合 · 扣手續費`, pnlColor(avg)],
+    ["候選獲利比例", pct(n ? wins / n : null), `${wins} / ${n} 個候選 · ${days} 個交易日`, "var(--text)"],
     ["最佳變體總 P&L", smoney(best.total_pnl_dollars), `${best.info.short} · 寬 ${best.width}`, pnlColor(best.total_pnl_dollars)],
     ["最差最大回撤", money(worstDD), worstDD < 0 ? "所有篩選變體中" : "未出現回撤", worstDD < 0 ? "var(--red)" : "var(--text)"],
     ["平均收取權利金", fix(n ? all.reduce((s, t) => s + t.credit_points, 0) / n : null) + " pt", "自然價 (bid/ask)", "var(--text)"],

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPXW 本機回測工作台</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;color:#1b1f24;background:#f6f5f2;font-size:15px}
+*{box-sizing:border-box}body{margin:0}main{max-width:1120px;margin:auto;padding:28px 24px 64px}
+h1{font-size:28px;margin:4px 0}h2{font-size:18px;margin:0 0 16px}p{line-height:1.55}
+.eyebrow{color:#1e4e8c;font-size:12px;font-weight:700;letter-spacing:.08em}.muted{color:#5f6670;font-size:13px}
+.card{background:#fff;border:1px solid #e6e3dd;border-radius:12px;padding:22px;margin-top:18px;box-shadow:0 2px 8px #15151508}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}.field{display:flex;flex-direction:column;gap:7px}
+label{font-weight:600;font-size:13px}input[type=date],input[type=text],input[type=number]{height:42px;border:1px solid #d6d2ca;border-radius:8px;padding:0 11px;background:#fff;color:#1b1f24;font:inherit;width:100%}
+.check{display:flex;align-items:center;gap:9px;font-weight:500;min-height:32px}.check input{width:17px;height:17px;accent-color:#2563a8}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}.split{display:flex;flex-wrap:wrap;gap:18px}.split>*{flex:1 1 240px}
+button,.button{border:1px solid #d6d2ca;border-radius:8px;background:#fff;color:#1b1f24;padding:11px 16px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;min-height:44px}
+button:hover,.button:hover{background:#f3f1ec}button.primary{background:#2563a8;border-color:#2563a8;color:white}button.primary:hover{background:#1e4e8c}button:disabled{opacity:.5;cursor:wait}
+.note{background:#fff6e5;border:1px solid #f1d9a8;border-radius:9px;padding:12px 15px;color:#7a5a20}.good{background:#e3f2e8;border-color:#b6d7c1;color:#1f6b3a}
+.status{font-weight:700}.mono,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}pre{background:#1b1f24;color:#e6edf3;padding:16px;border-radius:9px;white-space:pre-wrap;overflow:auto;max-height:340px;min-height:95px;font-size:12px}
+.tiny{font-size:12px;color:#5f6670}.divider{border:0;border-top:1px solid #e6e3dd;margin:22px 0}
+@media(max-width:600px){main{padding:18px 14px 40px}.card{padding:16px}h1{font-size:24px}}
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">SPXW · LOCAL WORKBENCH</div>
+  <h1>本機多腿回測工作台</h1>
+  <p class="muted">直接連接 Unusual Whales API 下載所需資料，在這部電腦執行回測並開啟儀表板。API key 只由本機程式讀取，不會送到瀏覽器。</p>
+
+  <section class="card" aria-label="資料狀態">
+    <h2>資料與連線</h2>
+    <div id="info" class="note">正在讀取本機資料狀態…</div>
+    <div class="row" style="margin-top:14px"><button id="check" type="button">檢查 UW API 連線</button><span id="connection" class="muted" role="status"></span></div>
+  </section>
+
+  <section class="card" aria-label="回測設定">
+    <h2>回測設定</h2>
+    <div class="grid">
+      <div class="field"><label for="start">開始日期</label><input id="start" type="date"></div>
+      <div class="field"><label for="end">結束日期</label><input id="end" type="date"></div>
+    </div>
+    <p class="tiny">目前引擎固定於美東時間 10:30 進場，持有至到期；訊號只使用當時已知的 SPX 一分鐘 K 棒。</p>
+    <hr class="divider">
+    <div class="split">
+      <div>
+        <label>訊號</label>
+        <label class="check"><input id="ema" type="checkbox" checked>首小時 EMA30 &gt; EMA50 賣 Put；反向賣 Call</label>
+        <label class="check"><input id="breakout" type="checkbox" checked>前 30 分鐘區間上下都突破，賣 Iron Condor</label>
+      </div>
+      <div>
+        <label>到期日</label>
+        <label class="check"><input id="dte0" type="checkbox" checked>0DTE</label>
+        <label class="check"><input id="dte1" type="checkbox" checked>1DTE（下一交易日到期）</label>
+      </div>
+    </div>
+    <hr class="divider">
+    <div class="grid">
+      <div class="field"><label for="widths">價差寬度（點）</label><input id="widths" type="text" value="5,10,20" spellcheck="false"></div>
+      <div class="field"><label for="putOffsets">Put 履約價偏移（點）</label><input id="putOffsets" type="text" value="-10,-5,0" spellcheck="false"></div>
+      <div class="field"><label for="callOffsets">Call 履約價偏移（點）</label><input id="callOffsets" type="text" value="0,5,10" spellcheck="false"></div>
+      <div class="field"><label for="quoteAge">報價最大年齡（秒）</label><input id="quoteAge" type="number" min="1" max="60" value="3"></div>
+      <div class="field"><label for="fee">手續費（美元／口／邊）</label><input id="fee" type="number" min="0" max="10" step="0.01" value="0.65"></div>
+    </div>
+    <hr class="divider">
+    <label class="check"><input id="download" type="checkbox" checked>自動向 UW 下載缺少的訊號日資料</label>
+    <label class="check"><input id="large" type="checkbox">允許一次下載超過 5 天（原始 ZIP 通常約 2 GB／天）</label>
+    <p class="tiny">已下載的日期會重用本機 Parquet，毋須再次下載。報價不新鮮或缺少任何所需期權腿，該候選會被拒絕。UW 報價是成交時快照，並非保證可成交的組合單價格。</p>
+    <div class="row"><button id="preview" type="button">預覽需要的資料</button><button id="run" type="button" class="primary">下載並執行回測</button></div>
+    <div id="previewResult" class="note" style="margin-top:16px" role="status">選好條件後可先預覽訊號日與所需下載量。</div>
+  </section>
+
+  <section class="card" aria-label="執行狀態">
+    <h2>執行狀態</h2>
+    <div class="row"><span id="phase" class="status">尚未執行</span><span id="runId" class="muted mono"></span></div>
+    <p id="message" class="muted">下載完整市場 full-tape 可能需要數分鐘；頁面會持續顯示進度。</p>
+    <div id="resultLinks" class="row" hidden>
+      <a id="dashboardLink" class="button primary" target="_blank" rel="noopener">開啟回測儀表板</a>
+      <a id="summaryLink" class="button" target="_blank" rel="noopener">下載摘要 CSV</a>
+      <a id="coverageLink" class="button" target="_blank" rel="noopener">下載覆蓋 CSV</a>
+    </div>
+    <pre id="logs" aria-label="執行紀錄">等待開始…</pre>
+  </section>
+  <p class="tiny">工作台只監聽這部電腦的 127.0.0.1。關閉啟動它的 Terminal 視窗便會停止服務；已下載資料與結果會留在本機。</p>
+</main>
+<script>
+const token='__CSRF_TOKEN__';
+const el=id=>document.getElementById(id);
+const checked=id=>el(id).checked;
+const selected=()=>({
+  start_date:el('start').value,end_date:el('end').value,
+  signals:[...(checked('ema')?['ema_first_hour']:[]),...(checked('breakout')?['double_breakout']:[])],
+  dtes:[...(checked('dte0')?[0]:[]),...(checked('dte1')?[1]:[])],
+  widths:el('widths').value,put_offsets:el('putOffsets').value,call_offsets:el('callOffsets').value,
+  max_quote_age_seconds:Number(el('quoteAge').value),commission_per_contract_per_side:Number(el('fee').value),
+  download_missing:checked('download'),allow_large_download:checked('large')
+});
+async function post(path,body={}){
+  const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Workbench-Token':token},body:JSON.stringify(body)});
+  const data=await response.json();if(!response.ok)throw new Error(data.error||'請求失敗');return data;
+}
+function previewText(plan){
+  const n=plan.missing_uw_days.length;
+  const days=n?plan.missing_uw_days.join('、'):'無';
+  return `${plan.signal_events} 個訊號事件；${plan.eligible_signal_expiries} 個有結算值的訊號 × 到期組合；${n} 個日期缺 UW 快取。\n需下載：${days}。${n?'以已測的一天約 2.1 GB ZIP 估計，實際大小會變動。':''}`;
+}
+async function loadInfo(){
+  try{const response=await fetch('/api/info');const info=await response.json();if(!response.ok)throw new Error(info.error);
+    el('start').value=info.default_date;el('end').value=info.default_date;
+    el('start').min=info.first_date;el('start').max=info.last_date;
+    el('end').min=info.first_date;el('end').max=info.last_date;
+    el('info').textContent=`SPX 分鐘資料：${info.first_date} 至 ${info.last_date}（${info.sessions} 個交易日）。已快取 ${info.cached_days} 個 UW 交易日（部分可能僅 0DTE）。${info.key_present?'已找到本機 UW key。':'尚未找到本機 UW key；可先在 Terminal 執行 scripts/setup_uw_key.py。'}`;
+    el('info').classList.toggle('good',info.key_present);
+  }catch(error){el('info').textContent=error.message;}
+}
+el('check').onclick=async()=>{el('check').disabled=true;el('connection').textContent='正在檢查…';try{const out=await post('/api/check');el('connection').textContent=out.message;}catch(error){el('connection').textContent=error.message;}finally{el('check').disabled=false;}};
+el('preview').onclick=async()=>{el('preview').disabled=true;try{const out=await post('/api/preview',selected());el('previewResult').textContent=previewText(out);}catch(error){el('previewResult').textContent=error.message;}finally{el('preview').disabled=false;}};
+el('run').onclick=async()=>{el('run').disabled=true;try{const out=await post('/api/run',selected());el('previewResult').textContent=previewText(out.plan);await refresh();}catch(error){el('previewResult').textContent=error.message;el('run').disabled=false;}};
+async function refresh(){try{const response=await fetch('/api/status');const s=await response.json();
+  const names={idle:'尚未執行',preparing:'準備中',downloading:'下載中',backtesting:'回測中',complete:'已完成',error:'發生錯誤'};
+  el('phase').textContent=names[s.phase]||s.phase;el('runId').textContent=s.run_id||'';
+  el('message').textContent=s.message;el('logs').textContent=s.logs.length?s.logs.join('\n'):'等待開始…';
+  el('run').disabled=['preparing','downloading','backtesting'].includes(s.phase);
+  el('resultLinks').hidden=!s.result_url;
+  if(s.result_url){el('dashboardLink').href=s.result_url;const base=s.result_url.replace('dashboard.html','');el('summaryLink').href=base+'summary.csv';el('coverageLink').href=base+'coverage.csv';}
+}catch(error){el('message').textContent=error.message;}}
+loadInfo();refresh();setInterval(refresh,1200);
+</script>
+</body>
+</html>
